@@ -1,0 +1,47 @@
+{
+  "name": "app",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@project-serum/anchor": "^0.24.2",
+    "@project-serum/sol-wallet-adapter": "^0.2.6",
+    "@solana/web3.js": "^1.41.3",
+    "@types/jest": "^27.4.1",
+    "@types/node": "^16.11.32",
+    "@types/react": "^18.0.8",
+    "@types/react-dom": "^18.0.3",
+    "antd": "^4.20.1",
+    "assert": "^2.0.0",
+    "buffer": "^6.0.3",
+    "buffer-layout": "^1.2.2",
+    "fs": "^0.0.1-security",
+    "react": "^18.1.0",
+    "react-async": "^10.0.1",
+    "react-dom": "^18.1.0",
+    "tsc": "^2.0.4",
+    "webpack": "^5.72.0"
+  },
+  "scripts": {
+    "start": "webpack serve",
+    "build": "webpack"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.17.10",
+    "@babel/core": "^7.17.10",
+    "@babel/plugin-transform-typescript": "^7.16.8",
+    "@babel/preset-react": "^7.16.7",
+    "@babel/preset-typescript": "^7.16.7",
+    "@solana/buffer-layout": "^4.0.0",
+    "@types/bn.js": "^5.1.0",
+    "@types/bs58": "^4.0.1",
+    "babel-loader": "^8.2.5",
+    "css-loader": "^6.7.1",
+    "path-browserify": "^1.0.1",
+    "prop-types": "^15.8.1",
+    "style-loader": "^3.3.1",
+    "ts-loader": "^9.3.0",
+    "typescript": "^4.6.4",
+    "webpack-cli": "^4.9.2",
+    "webpack-dev-server": "^4.8.1"
+  }
+}
