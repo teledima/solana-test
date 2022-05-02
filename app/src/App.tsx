@@ -12,7 +12,7 @@ import anchorProgram from './lib/program';
 import { donationAccount, ownerAccount } from './lib/constants';
 
 import './App.css';
-import sponsor from '../../../accounts/donation-account.json'
+import sponsor from '../../accounts/donation-account.json'
 
 const { Header } = Layout;
 
