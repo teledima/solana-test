@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button, Form, InputNumber, Layout } from 'antd';
 
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, clusterApiUrl } from '@solana/web3.js';
 import Wallet from "@project-serum/sol-wallet-adapter";
 import * as anchor from '@project-serum/anchor';
 import BN from "bn.js"
@@ -9,16 +9,13 @@ import BN from "bn.js"
 
 import provider from './lib/AnchorProvider';
 import anchorProgram from './lib/program';
-import { donationAccount, ownerAccount } from './lib/constants';
+import { donationAccount, ownerAccount, network, providerUrl } from './lib/constants';
 import { getStatePdaAddress } from './lib/utils';
 
 import './App.css';
 import sponsor from '../../accounts/donation-account.json'
 
 const { Header } = Layout;
-
-const providerUrl = 'https://www.sollet.io';
-const network = 'http://localhost:8899';
 
 anchor.setProvider(provider)
 
@@ -38,6 +35,8 @@ function App() {
     if (result.err === null) {
       const data = await anchorProgram.account.accountState.fetch(result.address);
       setSum(new BN(data.amount as BN).toNumber() / Math.pow(10, 9))
+    } else {
+      setSum(0);
     }
   }
 
