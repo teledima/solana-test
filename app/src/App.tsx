@@ -10,6 +10,7 @@ import BN from "bn.js"
 import provider from './lib/AnchorProvider';
 import anchorProgram from './lib/program';
 import { donationAccount, ownerAccount } from './lib/constants';
+import { getStatePdaAddress } from './lib/utils';
 
 import './App.css';
 import sponsor from '../../accounts/donation-account.json'
@@ -28,8 +29,17 @@ function App() {
   const [connected, setConnected] = useState<boolean>(solletWallet.connected);
   const [balance, setBalance] = useState<number>(0);
   const [owner, setOwner] = useState<PublicKey>(PublicKey.default);
+  const [sum, setSum] = useState<number>(0);
 
   const isOwner = () => owner.toString() === ownerAccount.toString();
+
+  const updateSum = async(address: PublicKey) => {
+    const result = await getStatePdaAddress(address);
+    if (result.err === null) {
+      const data = await anchorProgram.account.accountState.fetch(result.address);
+      setSum(new BN(data.amount as BN).toNumber() / Math.pow(10, 9))
+    }
+  }
 
   const updateBalance = async(address: PublicKey) => {
     setBalance(await connection.getBalance(address) / Math.pow(10, 9));
@@ -40,9 +50,13 @@ function App() {
     if (solletWallet.publicKey?.toString() === ownerAccount.toString()) {
       setOwner(ownerAccount);
       await updateBalance(donationAccount);
+      await updateSum(donationAccount);
     }
-    else
+    else {
       await updateBalance(solletWallet.publicKey as PublicKey);
+      await updateSum(solletWallet.publicKey as PublicKey);
+    }
+    
     console.log('sollet connected', solletWallet.publicKey?.toBase58());
   });
 
@@ -57,15 +71,29 @@ function App() {
     transaction.feePayer = from;
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
 
+    const stateAddress = await getStatePdaAddress(isOwner() ? donationAccount : solletWallet.publicKey as PublicKey);
+    if (stateAddress.err) {
+      const txCreateState = await anchorProgram.instruction.newState({
+        accounts: {
+          accountState: stateAddress.address,
+          payer: from,
+          systemProgram: anchor.web3.SystemProgram.programId
+        }
+      });
+      transaction.add(txCreateState);
+    }
+
     if (!isOwner()) {
-      const tx = await anchorProgram.instruction.initialize(new BN(amount), {
+      const tx = await anchorProgram.instruction.transfer(new BN(amount), {
         accounts: {
           from, to,
+          accountState: stateAddress.address,
           systemProgram: anchor.web3.SystemProgram.programId
         },
         
       } as any);
       transaction.add(tx);
+      console.log(transaction.instructions);
       transaction = await solletWallet.signTransaction(transaction);
       let signature = await anchor.web3.sendAndConfirmRawTransaction(connection, transaction.serialize());
       console.log("Submitted transaction " + signature + ", awaiting confirmation")
@@ -73,14 +101,13 @@ function App() {
       console.log("Transaction " + signature + " confirmed")
     }
     else {
-      const tx = await anchorProgram.instruction.initialize(new BN(amount), {
+      const tx = await anchorProgram.instruction.transfer(new BN(amount), {
         accounts: {
           from, to,
+          accountState: stateAddress.address,
           systemProgram: anchor.web3.SystemProgram.programId
         }
       })
-
-      console.log(tx);
       transaction.add(tx);
       anchor.web3.sendAndConfirmTransaction(connection, transaction, [anchor.web3.Keypair.fromSecretKey(new Uint8Array(sponsor as Array<number>))]);
     }
@@ -91,11 +118,13 @@ function App() {
       console.log('start')
       await sendLamports(donationAccount, ownerAccount, values.amount);
       await updateBalance(donationAccount);
+      await updateSum(donationAccount);
       console.log(`send ${values.amount} lamport to ${ownerAccount.toBase58()}`);
     }
     else {
       await sendLamports(solletWallet.publicKey as PublicKey, donationAccount, values.amount);
       await updateBalance(solletWallet.publicKey as PublicKey);
+      await updateSum(solletWallet.publicKey as PublicKey);
       console.log(`send ${values.amount} lamport from ${solletWallet.publicKey?.toBase58()}`);
     }
   }
@@ -107,7 +136,6 @@ function App() {
           <Button type='primary' onClick={async() => await solletWallet.connect()}>Connect wallet</Button>
         </Header>
         {connected ? 
-          <>
           <Form 
             style={{ padding: 24 }} 
             name='basic' 
@@ -115,6 +143,9 @@ function App() {
             wrapperCol={{ span:16 }}
             onFinish={onFinish}
           >
+            <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
+              <p style={{margin: 0}}> Sum: {sum?.toString()} SOL</p>
+            </Form.Item>
             <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
               <p style={{margin: 0}}> Current balance: {balance?.toString()} SOL</p>
             </Form.Item>
@@ -132,8 +163,7 @@ function App() {
                 <Button type='primary' htmlType='submit'>Make donate</Button>
               </Form.Item>
             }
-          </Form>
-          </> : 
+          </Form> : 
           null
         }
       </Layout>

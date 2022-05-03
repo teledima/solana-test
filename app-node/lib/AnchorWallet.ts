@@ -15,8 +15,7 @@ export default class AnchorWallet implements Wallet {
     }
     
     async signAllTransactions(txs: Transaction[]): Promise<Transaction[]> {
-        txs.map(t => t.partialSign(this.payer));
-        return txs
+        return txs.map(t => (window as any).solana.signTransaction(this.payer));
     }
 
     get publicKey(): PublicKey {
