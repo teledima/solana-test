@@ -30,6 +30,7 @@
     "@babel/cli": "^7.17.10",
     "@babel/core": "^7.17.10",
     "@babel/plugin-transform-typescript": "^7.16.8",
+    "@babel/preset-env": "^7.17.10",
     "@babel/preset-react": "^7.16.7",
     "@babel/preset-typescript": "^7.16.7",
     "@solana/buffer-layout": "^4.0.0",

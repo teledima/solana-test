@@ -9,14 +9,13 @@ test-ledger
 ###  Client  ###
 # dependencies
 app/node_modules
-app/.pnp
-app/.pnp.js
+app/package-lock.json
 
 # testing
 app/coverage
 
 # production
-app/build
+app/dist
 
 # misc
 app/.DS_Store
