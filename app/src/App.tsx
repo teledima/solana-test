@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Form, InputNumber, Layout } from 'antd';
+import { Button, Form, InputNumber, Layout, Table, Space, Tag } from 'antd';
 
 import { Connection, PublicKey, Transaction, clusterApiUrl } from '@solana/web3.js';
 import Wallet from "@project-serum/sol-wallet-adapter";
@@ -10,12 +10,25 @@ import BN from "bn.js"
 import provider from './lib/AnchorProvider';
 import anchorProgram from './lib/program';
 import { donationAccount, ownerAccount, network, providerUrl } from './lib/constants';
-import { getStatePdaAddress } from './lib/utils';
+import { getPdaAddress } from './lib/utils';
 
 import './App.css';
 import sponsor from '../../accounts/donation-account.json'
 
-const { Header } = Layout;
+const { Header, Content } = Layout;
+
+const columns = [
+  {
+    title: 'Address',
+    dataIndex: 'address',
+    key: 'address',
+  },
+  {
+    title: 'Sum (SOL)',
+    dataIndex: 'sum',
+    key: 'sum',
+  },
+];
 
 anchor.setProvider(provider)
 
@@ -27,17 +40,41 @@ function App() {
   const [balance, setBalance] = useState<number>(0);
   const [owner, setOwner] = useState<PublicKey>(PublicKey.default);
   const [sum, setSum] = useState<number>(0);
+  const [accounts, setAccounts] = useState<Array<Object>>([]);
+
+  const getSum = async(address: PublicKey) => {
+    const accountState = await getPdaAddress('user-stat', address);
+    if (accountState.err === null) {
+      const data = await anchorProgram.account.accountState.fetch(accountState.address);
+      return new BN(data.amount as BN).toNumber() / Math.pow(10, 9)
+    } else {
+      return 0;
+    }
+  }
+
+  const getAccounts = async() => {
+    const accountList = await getPdaAddress('users-key');
+    if (accountList.err === null) {
+      const data = await anchorProgram.account.accountListKeys.fetch(accountList.address)
+      return data.list
+    } else {
+      return [];
+    }
+  }
+
+  const updateAccounts = async() => {
+    const accountsAddresses = await getAccounts();
+    const accountsInfo = await Promise.all((accountsAddresses as Array<PublicKey>)
+      .map(async(publicKey: PublicKey, i: number) => { 
+        return {key: i.toString(), address: publicKey.toBase58(), sum: (await getSum(publicKey))}
+      }))
+    setAccounts(accountsInfo)
+  }
 
   const isOwner = () => owner.toString() === ownerAccount.toString();
 
   const updateSum = async(address: PublicKey) => {
-    const result = await getStatePdaAddress(address);
-    if (result.err === null) {
-      const data = await anchorProgram.account.accountState.fetch(result.address);
-      setSum(new BN(data.amount as BN).toNumber() / Math.pow(10, 9))
-    } else {
-      setSum(0);
-    }
+    setSum(await getSum(address))
   }
 
   const updateBalance = async(address: PublicKey) => {
@@ -50,6 +87,7 @@ function App() {
       setOwner(ownerAccount);
       await updateBalance(donationAccount);
       await updateSum(donationAccount);
+      await updateAccounts();
     }
     else {
       await updateBalance(solletWallet.publicKey as PublicKey);
@@ -70,29 +108,32 @@ function App() {
     transaction.feePayer = from;
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash
 
-    const stateAddress = await getStatePdaAddress(isOwner() ? donationAccount : solletWallet.publicKey as PublicKey);
-    if (stateAddress.err) {
-      const txCreateState = await anchorProgram.instruction.newState({
-        accounts: {
-          accountState: stateAddress.address,
+    const stateAccount = await getPdaAddress('user-stat', isOwner() ? donationAccount : solletWallet.publicKey as PublicKey);
+    const listAccount = await getPdaAddress('users-key');
+    if (stateAccount.err && listAccount.err === null) {
+      const txCreateState = await anchorProgram.methods
+        .newState()
+        .accounts({
+          accountState: stateAccount.address,
+          accountList: listAccount.address,
           payer: from,
           systemProgram: anchor.web3.SystemProgram.programId
-        }
-      });
+        })
+        .instruction();
       transaction.add(txCreateState);
     }
 
+    const txTransfer = await anchorProgram.methods
+      .transfer(new BN(amount))
+      .accounts({
+        from, to,
+        accountState: stateAccount.address,
+        systemProgram: anchor.web3.SystemProgram.programId
+      })
+      .instruction()
+    transaction.add(txTransfer);
+
     if (!isOwner()) {
-      const tx = await anchorProgram.instruction.transfer(new BN(amount), {
-        accounts: {
-          from, to,
-          accountState: stateAddress.address,
-          systemProgram: anchor.web3.SystemProgram.programId
-        },
-        
-      } as any);
-      transaction.add(tx);
-      console.log(transaction.instructions);
       transaction = await solletWallet.signTransaction(transaction);
       let signature = await anchor.web3.sendAndConfirmRawTransaction(connection, transaction.serialize());
       console.log("Submitted transaction " + signature + ", awaiting confirmation")
@@ -100,21 +141,16 @@ function App() {
       console.log("Transaction " + signature + " confirmed")
     }
     else {
-      const tx = await anchorProgram.instruction.transfer(new BN(amount), {
-        accounts: {
-          from, to,
-          accountState: stateAddress.address,
-          systemProgram: anchor.web3.SystemProgram.programId
-        }
-      })
-      transaction.add(tx);
-      anchor.web3.sendAndConfirmTransaction(connection, transaction, [anchor.web3.Keypair.fromSecretKey(new Uint8Array(sponsor as Array<number>))]);
+      anchor.web3.sendAndConfirmTransaction(
+        connection, 
+        transaction, 
+        [anchor.web3.Keypair.fromSecretKey(new Uint8Array(sponsor as Array<number>))]
+      );
     }
   }
 
   const onFinish = async(values: any) => {
     if (isOwner()) {
-      console.log('start')
       await sendLamports(donationAccount, ownerAccount, values.amount);
       await updateBalance(donationAccount);
       await updateSum(donationAccount);
@@ -135,34 +171,34 @@ function App() {
           <Button type='primary' onClick={async() => await solletWallet.connect()}>Connect wallet</Button>
         </Header>
         {connected ? 
-          <Form 
-            style={{ padding: 24 }} 
-            name='basic' 
-            labelCol={{ span: 8 }} 
-            wrapperCol={{ span:16 }}
-            onFinish={onFinish}
-          >
-            <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
-              <p style={{margin: 0}}> Sum: {sum?.toString()} SOL</p>
-            </Form.Item>
-            <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
-              <p style={{margin: 0}}> Current balance: {balance?.toString()} SOL</p>
-            </Form.Item>
-
-            <Form.Item label="Amount" name="amount" rules={[{ required: true, message: 'Please input donate sum!' }]}>
-              <InputNumber addonAfter="Lamport"/>
-            </Form.Item>
-
-            { 
+          <Content>
+            {
               isOwner() ? 
-              <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
-                <Button type='primary' htmlType='submit'>Take donate</Button>
-              </Form.Item> :
-              <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
-                <Button type='primary' htmlType='submit'>Make donate</Button>
-              </Form.Item>
+              <Table columns={columns} dataSource={accounts} pagination={false} style={{ padding: 20 }}/> :
+              null
             }
-          </Form> : 
+            <Form 
+              name='basic' 
+              labelCol={{ span: 8 }} 
+              wrapperCol={{ span:16 }}
+              onFinish={onFinish}
+            >
+              <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
+                <p style={{margin: 0}}> { isOwner() ? "Total withdraw: " : "Total contributed" } {sum?.toString()} SOL </p>
+              </Form.Item>
+              <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
+                <p style={{margin: 0}}> Current balance: {balance?.toString()} SOL</p>
+              </Form.Item>
+
+              <Form.Item label="Amount" name="amount" rules={[{ required: true, message: 'Please input donate sum!' }]}>
+                <InputNumber addonAfter="Lamport"/>
+              </Form.Item>
+
+              <Form.Item wrapperCol={{ offset: 8, span: 16 }}>
+                <Button type='primary' htmlType='submit'>{isOwner() ? "Take donate" : "Make donate"}</Button>
+              </Form.Item> 
+            </Form>
+          </Content> : 
           null
         }
       </Layout>

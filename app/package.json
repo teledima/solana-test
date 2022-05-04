@@ -23,7 +23,8 @@
   },
   "scripts": {
     "start": "webpack serve",
-    "build": "webpack"
+    "build": "webpack",
+    "list:init": "ts-node ./src/scripts/init_list.ts"
   },
   "devDependencies": {
     "@babel/cli": "^7.17.10",
@@ -40,6 +41,7 @@
     "prop-types": "^15.8.1",
     "style-loader": "^3.3.1",
     "ts-loader": "^9.3.0",
+    "ts-node": "^10.7.0",
     "typescript": "^4.6.4",
     "webpack-cli": "^4.9.2",
     "webpack-dev-server": "^4.8.1"
